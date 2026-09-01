@@ -19,8 +19,13 @@ Run focused tests while working on a small behavior change:
 GOWORK=off GOTOOLCHAIN=local go test ./... -run 'TestName' -count=1
 ```
 
-Current discovered test and benchmark entry points:
-- `BenchmarkEndpointBackpressureQueue`
+## Discovered Test Entry Points
+
+This inventory is generated from the current `_test.go` files in this repository. It is intentionally complete so documentation review can catch stale test, benchmark, fuzz, and example coverage when code changes.
+
+Total discovered entry points: 10.
+
+### Tests (9)
 - `TestBootstrapUDPResponsibilityChainEcho`
 - `TestDatagramReleaseAndValid`
 - `TestDatagramToMessageDecoderPreservesAddressAndSliceLifetime`
@@ -30,6 +35,15 @@ Current discovered test and benchmark entry points:
 - `TestMessageToDatagramEncoderWritesAddressedPayload`
 - `TestParseAddressAndString`
 - `TestUDPDialerEchoUsesDefaultRemote`
+
+### Benchmarks (1)
+- `BenchmarkEndpointBackpressureQueue`
+
+### Fuzz Targets (0)
+- No Fuzz targets are currently declared.
+
+### Examples (0)
+- No Example functions are currently declared.
 
 ## Race Checks
 

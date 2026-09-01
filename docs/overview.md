@@ -19,9 +19,11 @@ This module owns an I/O boundary. It creates or adapts Gnalloy Channels for a co
 - `gnalloy.org/transport-udp` (`udp`)
 
 ## Direct Gnalloy Dependencies
+
 - `gnalloy.org/gnalloy`
 
-## Direct Dependents in the Current Module Plan
+## Direct Dependents in the Current Repository Set
+
 - `gnalloy.org/examples`
 - `gnalloy.org/handler-ipfilter`
 - `gnalloy.org/handler-pcap`
