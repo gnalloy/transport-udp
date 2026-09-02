@@ -170,7 +170,7 @@ func (e *endpoint) AutoRead() bool {
 
 func (e *endpoint) InitialInterest() transport.ReadyMask {
 	if e.AutoRead() {
-		return transport.ReadyRead
+		return transport.ReadyRead | transport.ReadyLevelTriggered
 	}
 	return 0
 }
@@ -208,6 +208,11 @@ func (e *endpoint) readReady() {
 		return
 	}
 	read := false
+	maxMessages := channel.OptionMaxMessagesPerRead.Get(e.ch.Options())
+	if maxMessages <= 0 {
+		maxMessages = 1
+	}
+	messages := 0
 	for !e.closed.Load() {
 		buf, err := e.alloc.Acquire(e.readBufferSize)
 		if err != nil {
@@ -240,6 +245,10 @@ func (e *endpoint) readReady() {
 		}
 		e.ch.Pipeline().FireChannelRead(Datagram{Payload: buf, Addr: addr})
 		read = true
+		messages++
+		if messages >= maxMessages {
+			break
+		}
 	}
 	if read {
 		e.ch.Pipeline().FireChannelReadComplete()
@@ -470,7 +479,7 @@ func (e *endpoint) enableWriteInterest() error {
 		return nil
 	}
 	e.writeInterest = true
-	return e.loop.Poller().Modify(e.fd, transport.ReadyRead|transport.ReadyWrite)
+	return e.loop.Poller().Modify(e.fd, transport.ReadyRead|transport.ReadyWrite|transport.ReadyLevelTriggered)
 }
 
 func (e *endpoint) disableWriteInterest() error {
@@ -478,7 +487,7 @@ func (e *endpoint) disableWriteInterest() error {
 		return nil
 	}
 	e.writeInterest = false
-	return ignoreClosed(e.loop.Poller().Modify(e.fd, transport.ReadyRead))
+	return ignoreClosed(e.loop.Poller().Modify(e.fd, transport.ReadyRead|transport.ReadyLevelTriggered))
 }
 
 func (e *endpoint) fireException(err error) {
