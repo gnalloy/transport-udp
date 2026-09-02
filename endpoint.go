@@ -28,9 +28,10 @@ type endpoint struct {
 	inactiveFired          atomic.Bool
 	outboundBytes          atomic.Int64
 
-	outHead *outboundDatagram
-	outTail *outboundDatagram
-	outFree *outboundDatagram
+	outHead  *outboundDatagram
+	outTail  *outboundDatagram
+	outFree  *outboundDatagram
+	outBatch *datagramBatchWriter
 
 	writeHighWatermark int64
 	writeLowWatermark  int64
@@ -361,7 +362,7 @@ func (e *endpoint) flushOutbound() error {
 	var batch [maxDatagramWriteBatch]Datagram
 	for e.outHead != nil {
 		count := e.copyOutboundBatch(batch[:])
-		sent, again, err := sendDatagramBatch(e.fd, batch[:count])
+		sent, again, err := e.sendOutboundBatch(batch[:count])
 		if err != nil {
 			return err
 		}
@@ -379,6 +380,16 @@ func (e *endpoint) flushOutbound() error {
 		e.ch.Pipeline().FireFlushComplete()
 	}
 	return nil
+}
+
+func (e *endpoint) sendOutboundBatch(datagrams []Datagram) (int, bool, error) {
+	if len(datagrams) <= 1 {
+		return sendDatagramBatch(e.fd, datagrams)
+	}
+	if e.outBatch == nil {
+		e.outBatch = &datagramBatchWriter{}
+	}
+	return e.outBatch.send(e.fd, datagrams)
 }
 
 func (e *endpoint) copyOutboundBatch(dst []Datagram) int {

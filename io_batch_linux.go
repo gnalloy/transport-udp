@@ -16,7 +16,27 @@ type multiMessageHeader struct {
 	length uint32
 }
 
+type datagramBatchWriter struct {
+	headers   [maxDatagramWriteBatch]multiMessageHeader
+	iovecs    [maxDatagramWriteBatch]unix.Iovec
+	addresses [maxDatagramWriteBatch]unix.RawSockaddrAny
+}
+
 func sendDatagramBatch(fd transport.FDRef, datagrams []Datagram) (int, bool, error) {
+	if len(datagrams) == 0 {
+		return 0, false, nil
+	}
+	if len(datagrams) == 1 {
+		again, err := sendDatagram(fd, datagrams[0])
+		if err != nil || again {
+			return 0, again, err
+		}
+		return 1, false, nil
+	}
+	return new(datagramBatchWriter).send(fd, datagrams)
+}
+
+func (w *datagramBatchWriter) send(fd transport.FDRef, datagrams []Datagram) (int, bool, error) {
 	if len(datagrams) == 0 {
 		return 0, false, nil
 	}
@@ -30,30 +50,25 @@ func sendDatagramBatch(fd transport.FDRef, datagrams []Datagram) (int, bool, err
 	if len(datagrams) > maxDatagramWriteBatch {
 		datagrams = datagrams[:maxDatagramWriteBatch]
 	}
-	var headers [maxDatagramWriteBatch]multiMessageHeader
-	var iovecs [maxDatagramWriteBatch]unix.Iovec
-	var addresses [maxDatagramWriteBatch]unix.RawSockaddrAny
 	for index := range datagrams {
-		length, err := prepareMultiMessage(&headers[index], &iovecs[index], &addresses[index], datagrams[index])
+		length, err := prepareMultiMessage(&w.headers[index], &w.iovecs[index], &w.addresses[index], datagrams[index])
 		if err != nil {
 			return 0, false, err
 		}
-		headers[index].header.Namelen = length
+		w.headers[index].header.Namelen = length
 	}
 	for {
 		sent, _, errno := syscall.Syscall6(
 			unix.SYS_SENDMMSG,
 			uintptr(fd.FD),
-			uintptr(unsafe.Pointer(&headers[0])),
+			uintptr(unsafe.Pointer(&w.headers[0])),
 			uintptr(len(datagrams)),
 			0,
 			0,
 			0,
 		)
 		runtime.KeepAlive(datagrams)
-		runtime.KeepAlive(headers)
-		runtime.KeepAlive(iovecs)
-		runtime.KeepAlive(addresses)
+		runtime.KeepAlive(w)
 		if errno == unix.EINTR {
 			continue
 		}

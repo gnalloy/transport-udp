@@ -26,6 +26,30 @@ func TestSendDatagramBatchSendsAllMessages(t *testing.T) {
 	}
 }
 
+func TestDatagramBatchWriterCanBeReused(t *testing.T) {
+	receiver, target := newLinuxDatagramSocket(t, unix.AF_INET)
+	sender, _ := newLinuxDatagramSocket(t, unix.AF_INET)
+	writer := datagramBatchWriter{}
+
+	for _, payloads := range [][]string{{"one", "two", "three"}, {"four", "five"}} {
+		datagrams := make([]Datagram, len(payloads))
+		for index, payload := range payloads {
+			datagrams[index] = testDatagram(t, []byte(payload), target)
+		}
+		sent, again, err := writer.send(transport.FDRef{FD: sender}, datagrams)
+		if err != nil || again || sent != len(datagrams) {
+			t.Fatalf("sent=%d again=%t err=%v", sent, again, err)
+		}
+		buf := make([]byte, 16)
+		for index, want := range payloads {
+			n, _, again, err := recvDatagram(transport.FDRef{FD: receiver}, buf)
+			if err != nil || again || string(buf[:n]) != want {
+				t.Fatalf("receive index=%d payload=%q again=%t err=%v", index, buf[:n], again, err)
+			}
+		}
+	}
+}
+
 func testSendDatagramBatch(t *testing.T, family int, payloads []string) {
 	receiver, target := newLinuxDatagramSocket(t, family)
 	sender, _ := newLinuxDatagramSocket(t, family)
