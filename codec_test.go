@@ -82,6 +82,60 @@ func TestDatagramToMessageDecoderPreservesAddressAndSliceLifetime(t *testing.T) 
 	}
 }
 
+func TestDatagramToMessageDecoderClonesPooledAddress(t *testing.T) {
+	collector := &udpCaptureInbound{}
+	ch := channel.NewLocalChannel(1, buffer.NewHeapAllocator(), nil)
+	decoder := NewDatagramToMessageDecoderFunc(nil, func(_ *channel.HandlerContext, payload buffer.ByteBuf, out *codec.MessageList) error {
+		frame, err := payload.Slice(payload.ReaderIndex(), payload.ReadableBytes())
+		if err != nil {
+			return err
+		}
+		out.Add(frame)
+		return nil
+	})
+	if err := ch.Pipeline().AddLast("datagramDecoder", decoder); err != nil {
+		t.Fatal(err)
+	}
+	if err := ch.Pipeline().AddLast("collector", collector); err != nil {
+		t.Fatal(err)
+	}
+
+	var pool datagramPool
+	first := pool.acquireSocketAddress(newUDPTestBuf("ping"), transport.SocketAddress{
+		Family: transport.SocketFamilyIPv4,
+		IP:     [16]byte{127, 0, 0, 1},
+		Port:   9000,
+	})
+	ch.Pipeline().FireChannelRead(first)
+	reused := pool.acquireSocketAddress(nil, transport.SocketAddress{
+		Family: transport.SocketFamilyIPv4,
+		IP:     [16]byte{10, 0, 0, 1},
+		Port:   9001,
+	})
+	reused.Release()
+
+	if len(collector.msgs) != 1 {
+		t.Fatalf("messages=%d, want 1", len(collector.msgs))
+	}
+	addressed, ok := collector.msgs[0].(Addressed)
+	if !ok {
+		t.Fatalf("message=%T, want Addressed", collector.msgs[0])
+	}
+	if got := addressed.Addr.String(); got != "127.0.0.1:9000" {
+		t.Fatalf("address=%s, want 127.0.0.1:9000", got)
+	}
+	addressed.Release()
+}
+
+func TestAddressCloneHasIndependentIPStorage(t *testing.T) {
+	original := Address{IP: net.IPv4(127, 0, 0, 1), Port: 9000}
+	cloned := original.Clone()
+	cloned.IP[0] = 10
+	if original.IP[0] == cloned.IP[0] {
+		t.Fatal("cloned IP shares backing storage")
+	}
+}
+
 func TestDatagramReleaseAndValid(t *testing.T) {
 	buf := newUDPTestBuf("ok")
 	datagram := Datagram{Payload: buf, Addr: testAddr}

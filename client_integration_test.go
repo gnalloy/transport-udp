@@ -12,6 +12,20 @@ import (
 )
 
 func TestUDPDialerEchoUsesDefaultRemote(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		pooled bool
+	}{
+		{name: "value"},
+		{name: "pooled-pointer", pooled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testUDPDialerEcho(t, tc.pooled)
+		})
+	}
+}
+
+func testUDPDialerEcho(t *testing.T, pooled bool) {
 	serverGroup, err := transport.NewEventLoopGroup(transport.EventLoopGroupConfig{
 		Size:         1,
 		PollerConfig: transport.Config{Backend: transport.DefaultBackend()},
@@ -43,11 +57,13 @@ func TestUDPDialerEchoUsesDefaultRemote(t *testing.T) {
 	defer server.Close()
 
 	recorder := newUDPClientRecorder()
+	clientConfig := udp.DefaultConfig()
+	clientConfig.PooledInboundDatagrams = pooled
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	ch, err := bootstrap.NewDialer().
 		Group(clientGroup).
-		Transport(udp.NewTransport(udp.DefaultConfig())).
+		Transport(udp.NewTransport(clientConfig)).
 		Initializer(func(ch channel.Channel) error {
 			return ch.Pipeline().AddLast("recorder", recorder)
 		}).
@@ -93,8 +109,16 @@ func newUDPClientRecorder() *udpClientRecorder {
 }
 
 func (r *udpClientRecorder) ChannelRead(_ *channel.HandlerContext, msg any) {
-	datagram, ok := msg.(udp.Datagram)
-	if !ok {
+	var datagram udp.Datagram
+	switch value := msg.(type) {
+	case udp.Datagram:
+		datagram = value
+	case *udp.Datagram:
+		if value == nil {
+			return
+		}
+		datagram = *value
+	default:
 		return
 	}
 	defer datagram.Release()

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"gnalloy.org/gnalloy/buffer"
+	"gnalloy.org/gnalloy/transport"
 )
 
 // Datagram 是 UDP Pipeline 的入站和出站消息。
@@ -14,6 +15,7 @@ type Datagram struct {
 	// pool 和 self 仅用于池化入站消息；self 让值接收器能够归还原始指针。
 	pool *datagramPool
 	self *Datagram
+	ip   [16]byte
 }
 
 func (d Datagram) Release() {
@@ -42,6 +44,12 @@ func (p *datagramPool) acquire(payload buffer.ByteBuf, addr Address) *Datagram {
 	value.Addr = addr
 	value.pool = p
 	value.self = value
+	return value
+}
+
+func (p *datagramPool) acquireSocketAddress(payload buffer.ByteBuf, addr transport.SocketAddress) *Datagram {
+	value := p.acquire(payload, Address{})
+	value.Addr = socketAddressToAddressInto(addr, &value.ip)
 	return value
 }
 

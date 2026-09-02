@@ -2,6 +2,7 @@ package udp
 
 import (
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,11 @@ type Address struct {
 	IP   net.IP
 	Port int
 	Zone string
+}
+
+// Clone 返回可独立保留和修改的地址副本。
+func (a Address) Clone() Address {
+	return Address{IP: slices.Clone(a.IP), Port: a.Port, Zone: a.Zone}
 }
 
 func (a Address) Network() string {
@@ -118,17 +124,25 @@ func addressToSocketAddress(addr Address) (transport.SocketAddress, error) {
 }
 
 func socketAddressToAddress(addr transport.SocketAddress) Address {
+	var storage [16]byte
+	return socketAddressToAddressInto(addr, &storage)
+}
+
+func socketAddressToAddressInto(addr transport.SocketAddress, storage *[16]byte) Address {
+	if storage == nil {
+		return Address{}
+	}
 	switch addr.Family {
 	case transport.SocketFamilyIPv4:
-		return Address{IP: net.IPv4(addr.IP[0], addr.IP[1], addr.IP[2], addr.IP[3]), Port: addr.Port}
+		copy(storage[:4], addr.IP[:4])
+		return Address{IP: net.IP(storage[:4]), Port: addr.Port}
 	case transport.SocketFamilyIPv6:
 		zone := ""
 		if addr.ZoneID != 0 {
 			zone = strconv.Itoa(int(addr.ZoneID))
 		}
-		ip := make(net.IP, net.IPv6len)
-		copy(ip, addr.IP[:])
-		return Address{IP: ip, Port: addr.Port, Zone: zone}
+		copy(storage[:], addr.IP[:])
+		return Address{IP: net.IP(storage[:]), Port: addr.Port, Zone: zone}
 	default:
 		return Address{}
 	}

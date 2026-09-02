@@ -7,15 +7,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func recvDatagram(fd transport.FDRef, dst []byte) (int, Address, bool, error) {
+func recvDatagram(fd transport.FDRef, dst []byte) (int, transport.SocketAddress, bool, error) {
 	n, from, err := unix.Recvfrom(fd.FD, dst, 0)
 	if isAgain(err) {
-		return n, Address{}, true, nil
+		return n, transport.SocketAddress{}, true, nil
 	}
 	if err != nil {
-		return n, Address{}, false, err
+		return n, transport.SocketAddress{}, false, err
 	}
-	return n, unixSockaddrToAddress(from), false, nil
+	return n, unixSockaddrToSocketAddress(from), false, nil
 }
 
 func sendDatagram(fd transport.FDRef, datagram Datagram) (bool, error) {

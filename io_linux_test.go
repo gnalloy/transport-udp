@@ -23,13 +23,14 @@ func TestRawDatagramIPv4RoundTrip(t *testing.T) {
 		t.Fatalf("send again=%t err=%v", again, err)
 	}
 	dst := make([]byte, len(payload))
-	n, from, again, err := recvDatagram(transport.FDRef{FD: receiver}, dst)
+	n, socketAddr, again, err := recvDatagram(transport.FDRef{FD: receiver}, dst)
 	if err != nil || again {
 		t.Fatalf("receive again=%t err=%v", again, err)
 	}
 	if n != len(payload) || string(dst) != string(payload) {
 		t.Fatalf("receive bytes=%d payload=%q", n, dst)
 	}
+	from := socketAddressToAddress(socketAddr)
 	if !from.IP.IsLoopback() || from.Port <= 0 {
 		t.Fatalf("source address=%v", from)
 	}
@@ -45,13 +46,14 @@ func TestRawDatagramIPv6RoundTrip(t *testing.T) {
 		t.Fatalf("send again=%t err=%v", again, err)
 	}
 	dst := make([]byte, len(payload))
-	n, from, again, err := recvDatagram(transport.FDRef{FD: receiver}, dst)
+	n, socketAddr, again, err := recvDatagram(transport.FDRef{FD: receiver}, dst)
 	if err != nil || again {
 		t.Fatalf("receive again=%t err=%v", again, err)
 	}
 	if n != len(payload) || string(dst) != string(payload) {
 		t.Fatalf("receive bytes=%d payload=%q", n, dst)
 	}
+	from := socketAddressToAddress(socketAddr)
 	if !from.IP.Equal(net.IPv6loopback) || from.Port <= 0 {
 		t.Fatalf("source address=%v", from)
 	}
@@ -85,11 +87,11 @@ func TestRawSockaddrRejectsInvalidValues(t *testing.T) {
 	}
 	var raw unix.RawSockaddrAny
 	raw.Addr.Family = unix.AF_UNIX
-	if _, err := addressFromRawSockaddr(&raw, uint32(unsafe.Sizeof(raw))); !errors.Is(err, ErrInvalidAddress) {
+	if _, err := socketAddressFromRawSockaddr(&raw, uint32(unsafe.Sizeof(raw))); !errors.Is(err, ErrInvalidAddress) {
 		t.Fatalf("invalid family error=%v", err)
 	}
 	raw.Addr.Family = unix.AF_INET
-	if _, err := addressFromRawSockaddr(&raw, unix.SizeofSockaddrInet4-1); !errors.Is(err, ErrInvalidAddress) {
+	if _, err := socketAddressFromRawSockaddr(&raw, unix.SizeofSockaddrInet4-1); !errors.Is(err, ErrInvalidAddress) {
 		t.Fatalf("short address error=%v", err)
 	}
 }

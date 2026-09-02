@@ -3,9 +3,7 @@
 package udp
 
 import (
-	"net"
 	"runtime"
-	"strconv"
 	"syscall"
 	"unsafe"
 
@@ -14,7 +12,7 @@ import (
 )
 
 // 直接解析内核 sockaddr，避免通用转换路径对每个数据报查询 SO_PROTOCOL。
-func recvDatagram(fd transport.FDRef, dst []byte) (int, Address, bool, error) {
+func recvDatagram(fd transport.FDRef, dst []byte) (int, transport.SocketAddress, bool, error) {
 	var raw unix.RawSockaddrAny
 	length := uint32(unsafe.Sizeof(raw))
 	var data unsafe.Pointer
@@ -36,14 +34,14 @@ func recvDatagram(fd transport.FDRef, dst []byte) (int, Address, bool, error) {
 			continue
 		}
 		if rawWouldBlock(errno) {
-			return 0, Address{}, true, nil
+			return 0, transport.SocketAddress{}, true, nil
 		}
 		if errno != 0 {
-			return 0, Address{}, false, errno
+			return 0, transport.SocketAddress{}, false, errno
 		}
-		addr, err := addressFromRawSockaddr(&raw, length)
+		addr, err := socketAddressFromRawSockaddr(&raw, length)
 		if err != nil {
-			return int(n), Address{}, false, err
+			return int(n), transport.SocketAddress{}, false, err
 		}
 		return int(n), addr, false, nil
 	}
@@ -108,33 +106,33 @@ func rawSockaddrFromAddress(addr Address) (unix.RawSockaddrAny, uint32, error) {
 	return raw, unix.SizeofSockaddrInet6, nil
 }
 
-func addressFromRawSockaddr(raw *unix.RawSockaddrAny, length uint32) (Address, error) {
+func socketAddressFromRawSockaddr(raw *unix.RawSockaddrAny, length uint32) (transport.SocketAddress, error) {
 	if raw == nil {
-		return Address{}, ErrInvalidAddress
+		return transport.SocketAddress{}, ErrInvalidAddress
 	}
+	var addr transport.SocketAddress
 	switch raw.Addr.Family {
 	case unix.AF_INET:
 		if length < unix.SizeofSockaddrInet4 {
-			return Address{}, ErrInvalidAddress
+			return transport.SocketAddress{}, ErrInvalidAddress
 		}
 		sa := (*unix.RawSockaddrInet4)(unsafe.Pointer(raw))
-		ip := make(net.IP, net.IPv4len)
-		copy(ip, sa.Addr[:])
-		return Address{IP: ip, Port: int(networkToHost16(sa.Port))}, nil
+		addr.Family = transport.SocketFamilyIPv4
+		copy(addr.IP[:4], sa.Addr[:])
+		addr.Port = int(networkToHost16(sa.Port))
+		return addr, nil
 	case unix.AF_INET6:
 		if length < unix.SizeofSockaddrInet6 {
-			return Address{}, ErrInvalidAddress
+			return transport.SocketAddress{}, ErrInvalidAddress
 		}
 		sa := (*unix.RawSockaddrInet6)(unsafe.Pointer(raw))
-		ip := make(net.IP, net.IPv6len)
-		copy(ip, sa.Addr[:])
-		zone := ""
-		if sa.Scope_id != 0 {
-			zone = strconv.FormatUint(uint64(sa.Scope_id), 10)
-		}
-		return Address{IP: ip, Port: int(networkToHost16(sa.Port)), Zone: zone}, nil
+		addr.Family = transport.SocketFamilyIPv6
+		copy(addr.IP[:], sa.Addr[:])
+		addr.Port = int(networkToHost16(sa.Port))
+		addr.ZoneID = sa.Scope_id
+		return addr, nil
 	default:
-		return Address{}, ErrInvalidAddress
+		return transport.SocketAddress{}, ErrInvalidAddress
 	}
 }
 

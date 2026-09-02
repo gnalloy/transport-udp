@@ -8,8 +8,8 @@ func listenUDP(string, socketOptions) (udpSocket, error) {
 	return udpSocket{}, transport.ErrUnsupportedPoller
 }
 
-func recvDatagram(transport.FDRef, []byte) (int, Address, bool, error) {
-	return 0, Address{}, false, transport.ErrUnsupportedPoller
+func recvDatagram(transport.FDRef, []byte) (int, transport.SocketAddress, bool, error) {
+	return 0, transport.SocketAddress{}, false, transport.ErrUnsupportedPoller
 }
 
 func sendDatagram(transport.FDRef, Datagram) (bool, error) {

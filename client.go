@@ -37,10 +37,11 @@ func (t *Transport) Dial(ctx context.Context, cfg bootstrap.ClientConfig) (chann
 		return nil, err
 	}
 	ep := &endpoint{
-		id:             transport.ChannelID(t.nextID.Add(1)),
-		fd:             sock.fd,
-		readBufferSize: opts.readBufferSize,
-		remote:         remoteParsed.Address(),
+		id:                     transport.ChannelID(t.nextID.Add(1)),
+		fd:                     sock.fd,
+		readBufferSize:         opts.readBufferSize,
+		pooledInboundDatagrams: opts.pooledInboundDatagrams,
+		remote:                 remoteParsed.Address(),
 	}
 	ep.initBackpressure(opts.writeBufferWatermark)
 	ep.loop = loop

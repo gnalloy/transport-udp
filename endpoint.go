@@ -241,7 +241,7 @@ func (e *endpoint) readReady() {
 				return
 			}
 		}
-		if addr.IP == nil {
+		if !addr.Valid() {
 			buf.Release()
 			break
 		}
@@ -280,7 +280,7 @@ func (e *endpoint) handleReadCompletion(ev transport.PollEvent) {
 	}
 	read := false
 	if ev.N > 0 && ev.Buf != nil && ev.Addr.Valid() {
-		e.fireChannelRead(ev.Buf, socketAddressToAddress(ev.Addr))
+		e.fireChannelRead(ev.Buf, ev.Addr)
 		read = true
 	} else if ev.Buf != nil {
 		ev.Buf.Release()
@@ -296,12 +296,12 @@ func (e *endpoint) handleReadCompletion(ev transport.PollEvent) {
 	}
 }
 
-func (e *endpoint) fireChannelRead(payload buffer.ByteBuf, addr Address) {
+func (e *endpoint) fireChannelRead(payload buffer.ByteBuf, addr transport.SocketAddress) {
 	if e.pooledInboundDatagrams {
-		e.ch.Pipeline().FireChannelRead(e.inboundDatagrams.acquire(payload, addr))
+		e.ch.Pipeline().FireChannelRead(e.inboundDatagrams.acquireSocketAddress(payload, addr))
 		return
 	}
-	e.ch.Pipeline().FireChannelRead(Datagram{Payload: payload, Addr: addr})
+	e.ch.Pipeline().FireChannelRead(Datagram{Payload: payload, Addr: socketAddressToAddress(addr)})
 }
 
 func (e *endpoint) handleWriteCompletion(ev transport.PollEvent) {

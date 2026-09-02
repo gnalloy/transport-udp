@@ -43,15 +43,15 @@ func listenUDP(address string, opts socketOptions) (udpSocket, error) {
 	return udpSocket{fd: transport.FDRef{FD: int(fd)}, addr: socketName(fd, addr.String()), family: family}, nil
 }
 
-func recvDatagram(fd transport.FDRef, dst []byte) (int, Address, bool, error) {
+func recvDatagram(fd transport.FDRef, dst []byte) (int, transport.SocketAddress, bool, error) {
 	n, from, err := windows.Recvfrom(windows.Handle(uintptr(fd.FD)), dst, 0)
 	if isAgain(err) {
-		return n, Address{}, true, nil
+		return n, transport.SocketAddress{}, true, nil
 	}
 	if err != nil {
-		return n, Address{}, false, err
+		return n, transport.SocketAddress{}, false, err
 	}
-	return n, windowsSockaddrToAddress(from), false, nil
+	return n, windowsSockaddrToSocketAddress(from), false, nil
 }
 
 func sendDatagram(fd transport.FDRef, datagram Datagram) (bool, error) {
@@ -107,17 +107,25 @@ func addressToWindowsSockaddr(addr Address) (windows.Sockaddr, error) {
 }
 
 func windowsSockaddrToAddress(sa windows.Sockaddr) Address {
+	return socketAddressToAddress(windowsSockaddrToSocketAddress(sa))
+}
+
+func windowsSockaddrToSocketAddress(sa windows.Sockaddr) transport.SocketAddress {
+	var addr transport.SocketAddress
 	switch v := sa.(type) {
 	case *windows.SockaddrInet4:
-		return Address{IP: net.IP(v.Addr[:]), Port: v.Port}
+		addr.Family = transport.SocketFamilyIPv4
+		copy(addr.IP[:4], v.Addr[:])
+		addr.Port = v.Port
+		return addr
 	case *windows.SockaddrInet6:
-		zone := ""
-		if v.ZoneId != 0 {
-			zone = strconv.Itoa(int(v.ZoneId))
-		}
-		return Address{IP: net.IP(v.Addr[:]), Port: v.Port, Zone: zone}
+		addr.Family = transport.SocketFamilyIPv6
+		copy(addr.IP[:], v.Addr[:])
+		addr.Port = v.Port
+		addr.ZoneID = v.ZoneId
+		return addr
 	default:
-		return Address{}
+		return transport.SocketAddress{}
 	}
 }
 

@@ -35,6 +35,38 @@ func TestDatagramPoolReusesEnvelopeWithoutAllocating(t *testing.T) {
 	}
 }
 
+func TestDatagramPoolAcquiresSocketAddressWithoutAllocating(t *testing.T) {
+	var pool datagramPool
+	addr := transport.SocketAddress{
+		Family: transport.SocketFamilyIPv4,
+		IP:     [16]byte{127, 0, 0, 1},
+		Port:   9000,
+	}
+	datagram := pool.acquireSocketAddress(nil, addr)
+	datagram.Release()
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		value := pool.acquireSocketAddress(nil, addr)
+		value.Release()
+	})
+	if allocs != 0 {
+		t.Fatalf("allocations=%f, want 0", allocs)
+	}
+}
+
+func TestPooledInboundDispatchDoesNotAllocate(t *testing.T) {
+	ep := newInboundTestEndpoint(t, nil, true)
+	addr := testSocketAddress(t)
+	ep.fireChannelRead(nil, addr)
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		ep.fireChannelRead(nil, addr)
+	})
+	if allocs != 0 {
+		t.Fatalf("allocations=%f, want 0", allocs)
+	}
+}
+
 func TestPooledDatagramPointerReleaseIsIdempotent(t *testing.T) {
 	var pool datagramPool
 	buf := buffer.NewHeapBuffer(32)
@@ -53,7 +85,7 @@ func TestEndpointDefaultInboundDatagramUsesValueContract(t *testing.T) {
 	ep := newInboundTestEndpoint(t, collector, false)
 	buf := newUDPTestBuf("value")
 
-	ep.fireChannelRead(buf, testAddr)
+	ep.fireChannelRead(buf, testSocketAddress(t))
 
 	if len(collector.msgs) != 1 {
 		t.Fatalf("messages=%d, want 1", len(collector.msgs))
@@ -69,7 +101,7 @@ func TestEndpointPooledInboundDatagramUsesPointerContract(t *testing.T) {
 	ep := newInboundTestEndpoint(t, collector, true)
 	buf := newUDPTestBuf("pointer")
 
-	ep.fireChannelRead(buf, testAddr)
+	ep.fireChannelRead(buf, testSocketAddress(t))
 
 	if len(collector.msgs) != 1 {
 		t.Fatalf("messages=%d, want 1", len(collector.msgs))
@@ -114,4 +146,13 @@ func newInboundTestEndpoint(t *testing.T, collector *udpCaptureInbound, pooled b
 		}
 	}
 	return &endpoint{ch: ch, pooledInboundDatagrams: pooled}
+}
+
+func testSocketAddress(t *testing.T) transport.SocketAddress {
+	t.Helper()
+	addr, err := addressToSocketAddress(testAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return addr
 }

@@ -48,6 +48,13 @@ func (d *DatagramToMessageDecoder) ChannelRead(ctx *channel.HandlerContext, msg 
 	}
 	d.out.Reset()
 	err := d.decoder.DecodeDatagram(ctx, datagram.Payload, &d.out)
+	var addr Address
+	if err == nil && d.out.Len() != 0 {
+		addr = datagram.Addr
+		if datagram.pool != nil {
+			addr = addr.Clone()
+		}
+	}
 	datagram.Release()
 	if err != nil {
 		d.out.ReleaseAll()
@@ -55,7 +62,7 @@ func (d *DatagramToMessageDecoder) ChannelRead(ctx *channel.HandlerContext, msg 
 		return
 	}
 	for i := 0; i < d.out.Len(); i++ {
-		ctx.FireChannelRead(Addressed{Message: d.out.At(i), Addr: datagram.Addr})
+		ctx.FireChannelRead(Addressed{Message: d.out.At(i), Addr: addr})
 	}
 	d.out.Reset()
 }

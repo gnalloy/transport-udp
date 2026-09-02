@@ -41,17 +41,25 @@ func addressToUnixSockaddr(addr Address) (unix.Sockaddr, error) {
 }
 
 func unixSockaddrToAddress(sa unix.Sockaddr) Address {
+	return socketAddressToAddress(unixSockaddrToSocketAddress(sa))
+}
+
+func unixSockaddrToSocketAddress(sa unix.Sockaddr) transport.SocketAddress {
+	var addr transport.SocketAddress
 	switch v := sa.(type) {
 	case *unix.SockaddrInet4:
-		return Address{IP: net.IP(v.Addr[:]), Port: v.Port}
+		addr.Family = transport.SocketFamilyIPv4
+		copy(addr.IP[:4], v.Addr[:])
+		addr.Port = v.Port
+		return addr
 	case *unix.SockaddrInet6:
-		zone := ""
-		if v.ZoneId != 0 {
-			zone = strconv.Itoa(int(v.ZoneId))
-		}
-		return Address{IP: net.IP(v.Addr[:]), Port: v.Port, Zone: zone}
+		addr.Family = transport.SocketFamilyIPv6
+		copy(addr.IP[:], v.Addr[:])
+		addr.Port = v.Port
+		addr.ZoneID = v.ZoneId
+		return addr
 	default:
-		return Address{}
+		return transport.SocketAddress{}
 	}
 }
 
