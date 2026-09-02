@@ -18,6 +18,8 @@ type endpoint struct {
 	alloc            buffer.Allocator
 	remote           Address
 	inboundDatagrams datagramPool
+	inBatch          *datagramBatchReader
+	inSingle         [1]receivedDatagram
 
 	readBufferSize         int
 	pooledInboundDatagrams bool
@@ -198,46 +200,55 @@ func (e *endpoint) readReady() {
 	if maxMessages <= 0 {
 		maxMessages = 1
 	}
-	messages := 0
-	for !e.closed.Load() {
-		buf, err := e.alloc.Acquire(e.readBufferSize)
-		if err != nil {
-			e.fireException(err)
-			_ = e.Close()
-			return
-		}
-		n, addr, again, err := recvDatagram(e.fd, buf.WritableBytesView())
-		if again {
-			buf.Release()
-			break
-		}
-		if err != nil {
-			buf.Release()
-			e.fireException(err)
-			_ = e.Close()
-			return
-		}
-		if n > 0 {
-			if err := buf.AdvanceWriter(n); err != nil {
-				buf.Release()
-				e.fireException(err)
-				_ = e.Close()
-				return
+	remaining := maxMessages
+	for remaining > 0 && !e.closed.Load() {
+		messages, drained, err := e.receiveInbound(remaining)
+		for index := range messages {
+			if e.closed.Load() {
+				releaseReceivedDatagrams(messages[index:])
+				break
 			}
+			message := messages[index]
+			messages[index] = receivedDatagram{}
+			e.fireChannelRead(message.payload, message.addr)
+			read = true
 		}
-		if !addr.Valid() {
-			buf.Release()
-			break
+		remaining -= len(messages)
+		if err != nil {
+			e.fireException(err)
+			_ = e.Close()
+			return
 		}
-		e.fireChannelRead(buf, addr)
-		read = true
-		messages++
-		if messages >= maxMessages {
+		if drained || len(messages) == 0 {
 			break
 		}
 	}
 	if read {
 		e.ch.Pipeline().FireChannelReadComplete()
+	}
+}
+
+func (e *endpoint) receiveInbound(limit int) ([]receivedDatagram, bool, error) {
+	if limit <= 1 {
+		message, drained, err := receiveSingleDatagram(e.fd, e.alloc, e.readBufferSize)
+		if message.payload == nil {
+			return nil, drained, err
+		}
+		e.inSingle[0] = message
+		return e.inSingle[:], drained, err
+	}
+	if e.inBatch == nil {
+		e.inBatch = &datagramBatchReader{}
+	}
+	return e.inBatch.receive(e.fd, e.alloc, e.readBufferSize, limit)
+}
+
+func releaseReceivedDatagrams(messages []receivedDatagram) {
+	for index := range messages {
+		if messages[index].payload != nil {
+			messages[index].payload.Release()
+		}
+		messages[index] = receivedDatagram{}
 	}
 }
 
