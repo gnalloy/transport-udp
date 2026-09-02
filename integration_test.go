@@ -15,6 +15,20 @@ import (
 )
 
 func TestBootstrapUDPResponsibilityChainEcho(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		pooled bool
+	}{
+		{name: "value"},
+		{name: "pooled-pointer", pooled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testBootstrapUDPEcho(t, tc.pooled)
+		})
+	}
+}
+
+func testBootstrapUDPEcho(t *testing.T, pooled bool) {
 	boss, err := transport.NewEventLoopGroup(transport.EventLoopGroupConfig{
 		Size:         1,
 		PollerConfig: transport.Config{Backend: transport.DefaultBackend()},
@@ -34,9 +48,11 @@ func TestBootstrapUDPResponsibilityChainEcho(t *testing.T) {
 	defer shutdownGroup(t, workers)
 
 	events := make(chan string, 4)
+	udpConfig := udp.DefaultConfig()
+	udpConfig.PooledInboundDatagrams = pooled
 	server, err := bootstrap.NewServerBootstrap().
 		Group(boss, workers).
-		Transport(udp.NewTransport(udp.DefaultConfig())).
+		Transport(udp.NewTransport(udpConfig)).
 		ChildInitializer(func(ch channel.Channel) error {
 			if err := ch.Pipeline().AddLast("datagramDecoder", udp.NewDatagramToMessageDecoder(udpPayloadDecoder{})); err != nil {
 				return err

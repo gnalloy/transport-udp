@@ -54,10 +54,11 @@ func (t *Transport) Bind(ctx context.Context, cfg bootstrap.ServerConfig) (boots
 	}
 	for _, sock := range sockets {
 		ep := &endpoint{
-			id:             transport.ChannelID(t.nextID.Add(1)),
-			fd:             sock.fd,
-			readBufferSize: opts.readBufferSize,
-			server:         server,
+			id:                     transport.ChannelID(t.nextID.Add(1)),
+			fd:                     sock.fd,
+			readBufferSize:         opts.readBufferSize,
+			pooledInboundDatagrams: opts.pooledInboundDatagrams,
+			server:                 server,
 		}
 		ep.initBackpressure(opts.writeBufferWatermark)
 		server.endpoints = append(server.endpoints, ep)

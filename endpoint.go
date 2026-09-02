@@ -13,18 +13,20 @@ type endpoint struct {
 	id transport.ChannelID
 	fd transport.FDRef
 
-	loop   *transport.EventLoop
-	ch     *channel.LocalChannel
-	alloc  buffer.Allocator
-	remote Address
+	loop             *transport.EventLoop
+	ch               *channel.LocalChannel
+	alloc            buffer.Allocator
+	remote           Address
+	inboundDatagrams datagramPool
 
-	readBufferSize int
-	writeInterest  bool
-	readPending    bool
-	writePending   bool
-	closed         atomic.Bool
-	inactiveFired  atomic.Bool
-	outboundBytes  atomic.Int64
+	readBufferSize         int
+	pooledInboundDatagrams bool
+	writeInterest          bool
+	readPending            bool
+	writePending           bool
+	closed                 atomic.Bool
+	inactiveFired          atomic.Bool
+	outboundBytes          atomic.Int64
 
 	outHead *outboundDatagram
 	outTail *outboundDatagram
@@ -243,7 +245,7 @@ func (e *endpoint) readReady() {
 			buf.Release()
 			break
 		}
-		e.ch.Pipeline().FireChannelRead(Datagram{Payload: buf, Addr: addr})
+		e.fireChannelRead(buf, addr)
 		read = true
 		messages++
 		if messages >= maxMessages {
@@ -278,7 +280,7 @@ func (e *endpoint) handleReadCompletion(ev transport.PollEvent) {
 	}
 	read := false
 	if ev.N > 0 && ev.Buf != nil && ev.Addr.Valid() {
-		e.ch.Pipeline().FireChannelRead(Datagram{Payload: ev.Buf, Addr: socketAddressToAddress(ev.Addr)})
+		e.fireChannelRead(ev.Buf, socketAddressToAddress(ev.Addr))
 		read = true
 	} else if ev.Buf != nil {
 		ev.Buf.Release()
@@ -292,6 +294,14 @@ func (e *endpoint) handleReadCompletion(ev transport.PollEvent) {
 			_ = e.Close()
 		}
 	}
+}
+
+func (e *endpoint) fireChannelRead(payload buffer.ByteBuf, addr Address) {
+	if e.pooledInboundDatagrams {
+		e.ch.Pipeline().FireChannelRead(e.inboundDatagrams.acquire(payload, addr))
+		return
+	}
+	e.ch.Pipeline().FireChannelRead(Datagram{Payload: payload, Addr: addr})
 }
 
 func (e *endpoint) handleWriteCompletion(ev transport.PollEvent) {

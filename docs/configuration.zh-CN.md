@@ -17,6 +17,8 @@ Gnalloy 模块的配置必须显式。优先使用构造参数、option struct �
 - 安全相关默认值保持关闭或保守。
 - 每个生产覆盖项都应记录在拥有该配置的服务中，而不是写进 library module。
 
+`Config.PooledInboundDatagrams` 默认关闭，以保留 `Datagram` 值类型契约。启用后，入站 handler 接收 `*Datagram`；传给 `Write` 或 `WriteAndFlush` 表示转移所有权，丢弃时必须调用 `Release`。异步 handler 必须先保留 payload 并复制所需地址，再释放 envelope；所有权已经转移后不得继续保留或释放池化指针。
+
 ## 环境变量
 
 普通单元测试不要求该 library module 提供仓库专属环境变量。应用、examples、benchmarks 和 CI job 可以围绕它定义自己的变量。

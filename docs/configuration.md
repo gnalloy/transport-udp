@@ -17,6 +17,8 @@ Configuration in Gnalloy modules is explicit. Prefer constructor arguments, opti
 - Keep security-sensitive defaults closed or conservative.
 - Document every production override in the owning service, not in this library module.
 
+`Config.PooledInboundDatagrams` is disabled by default, preserving the `Datagram` value contract. When enabled, inbound handlers receive `*Datagram`; forwarding it to `Write` or `WriteAndFlush` transfers ownership, while dropping it requires `Release`. An asynchronous handler must retain the payload and copy the address it needs before releasing the envelope. It must not retain or release the pooled pointer after ownership has been transferred.
+
 ## Environment Variables
 
 This library module does not require repository-specific environment variables for normal unit tests. Applications, examples, benchmarks, and CI jobs may define their own variables around it.

@@ -11,10 +11,12 @@ const defaultReadBufferSize = 2048
 type AllocatorFactory func(loop *transport.EventLoop) (buffer.Allocator, error)
 
 type Config struct {
-	ReuseAddr            bool
-	ReusePort            bool
-	ReadBufferSize       int
-	WriteBufferWatermark transport.WriteBufferWatermark
+	ReuseAddr bool
+	ReusePort bool
+	// PooledInboundDatagrams 使用可复用指针承载入站报文，处理器接收 *Datagram 并负责转移或释放其所有权。
+	PooledInboundDatagrams bool
+	ReadBufferSize         int
+	WriteBufferWatermark   transport.WriteBufferWatermark
 
 	AllocatorFactory AllocatorFactory
 }
@@ -36,17 +38,19 @@ func normalizeConfig(cfg Config) Config {
 }
 
 type socketOptions struct {
-	reuseAddr            bool
-	reusePort            bool
-	readBufferSize       int
-	writeBufferWatermark transport.WriteBufferWatermark
+	reuseAddr              bool
+	reusePort              bool
+	pooledInboundDatagrams bool
+	readBufferSize         int
+	writeBufferWatermark   transport.WriteBufferWatermark
 }
 
 func (c Config) socketOptions() socketOptions {
 	return socketOptions{
-		reuseAddr:            c.ReuseAddr,
-		reusePort:            c.ReusePort,
-		readBufferSize:       c.ReadBufferSize,
-		writeBufferWatermark: c.WriteBufferWatermark,
+		reuseAddr:              c.ReuseAddr,
+		reusePort:              c.ReusePort,
+		pooledInboundDatagrams: c.PooledInboundDatagrams,
+		readBufferSize:         c.ReadBufferSize,
+		writeBufferWatermark:   c.WriteBufferWatermark,
 	}
 }
