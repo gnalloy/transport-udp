@@ -11,25 +11,27 @@ import (
 
 func TestSendDatagramBatchSendsAllMessages(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		family int
+		name     string
+		family   int
+		payloads []string
 	}{
-		{name: "ipv4", family: unix.AF_INET},
-		{name: "ipv6", family: unix.AF_INET6},
+		{name: "ipv4_single", family: unix.AF_INET, payloads: []string{"one"}},
+		{name: "ipv4_batch", family: unix.AF_INET, payloads: []string{"one", "two", "three"}},
+		{name: "ipv6_single", family: unix.AF_INET6, payloads: []string{"one"}},
+		{name: "ipv6_batch", family: unix.AF_INET6, payloads: []string{"one", "two", "three"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			testSendDatagramBatch(t, tc.family)
+			testSendDatagramBatch(t, tc.family, tc.payloads)
 		})
 	}
 }
 
-func testSendDatagramBatch(t *testing.T, family int) {
+func testSendDatagramBatch(t *testing.T, family int, payloads []string) {
 	receiver, target := newLinuxDatagramSocket(t, family)
 	sender, _ := newLinuxDatagramSocket(t, family)
-	datagrams := []Datagram{
-		testDatagram(t, []byte("one"), target),
-		testDatagram(t, []byte("two"), target),
-		testDatagram(t, []byte("three"), target),
+	datagrams := make([]Datagram, len(payloads))
+	for index, payload := range payloads {
+		datagrams[index] = testDatagram(t, []byte(payload), target)
 	}
 
 	sent, again, err := sendDatagramBatch(transport.FDRef{FD: sender}, datagrams)
@@ -37,7 +39,7 @@ func testSendDatagramBatch(t *testing.T, family int) {
 		t.Fatalf("sent=%d again=%t err=%v", sent, again, err)
 	}
 	buf := make([]byte, 16)
-	for index, want := range []string{"one", "two", "three"} {
+	for index, want := range payloads {
 		n, _, again, err := recvDatagram(transport.FDRef{FD: receiver}, buf)
 		if err != nil || again {
 			t.Fatalf("receive index=%d again=%t err=%v", index, again, err)

@@ -20,6 +20,13 @@ func sendDatagramBatch(fd transport.FDRef, datagrams []Datagram) (int, bool, err
 	if len(datagrams) == 0 {
 		return 0, false, nil
 	}
+	if len(datagrams) == 1 {
+		again, err := sendDatagram(fd, datagrams[0])
+		if err != nil || again {
+			return 0, again, err
+		}
+		return 1, false, nil
+	}
 	if len(datagrams) > maxDatagramWriteBatch {
 		datagrams = datagrams[:maxDatagramWriteBatch]
 	}
