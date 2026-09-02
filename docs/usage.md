@@ -23,6 +23,7 @@ import "gnalloy.org/transport-udp"
 - Platform-specific transports must return explicit unsupported errors rather than silently falling back.
 - Privileged transports such as raw sockets and L2 capture need operating-system capabilities outside the Go module.
 - Protocol, TLS, proxy, and observability handlers should be installed through the Channel pipeline.
+- `Write` transfers message ownership into the outbound queue; call `Flush` to submit queued datagrams. Linux batches one flush with `sendmmsg`, while other platforms preserve ordered fallback writes.
 
 ## API Selection
 

@@ -81,7 +81,11 @@ func testUDPDialerEcho(t *testing.T, pooled bool) {
 		out.Release()
 		t.Fatal(err)
 	}
-	if err := ch.WriteAndFlush(out); err != nil {
+	if err := ch.Write(out); err != nil {
+		t.Fatal(err)
+	}
+	recorder.assertNoPayload(t, 50*time.Millisecond)
+	if err := ch.Flush(); err != nil {
 		t.Fatal(err)
 	}
 	recorder.waitPayload(t, "ping")
@@ -137,5 +141,14 @@ func (r *udpClientRecorder) waitPayload(t *testing.T, want string) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatalf("timeout waiting for payload %q", want)
+	}
+}
+
+func (r *udpClientRecorder) assertNoPayload(t *testing.T, wait time.Duration) {
+	t.Helper()
+	select {
+	case payload := <-r.payloads:
+		t.Fatalf("received payload %q before flush", payload)
+	case <-time.After(wait):
 	}
 }

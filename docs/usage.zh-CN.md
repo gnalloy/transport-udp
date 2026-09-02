@@ -23,6 +23,7 @@ import "gnalloy.org/transport-udp"
 - 平台相关 transport 必须返回显式 unsupported 错误，不能静默降级。
 - raw socket、L2 capture 等特权传输需要 Go 模块之外的操作系统能力。
 - protocol、TLS、proxy 与 observability handler 应通过 Channel pipeline 安装。
+- `Write` 将消息所有权转移到出站队列；调用 `Flush` 后才提交已排队的 datagram。Linux 使用 `sendmmsg` 批量提交一次 flush，其他平台保持有序逐包回退。
 
 ## API 选择
 

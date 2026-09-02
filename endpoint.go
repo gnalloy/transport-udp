@@ -124,24 +124,7 @@ func (e *endpoint) Write(msg any) error {
 		datagram.Release()
 		return ErrServerClosed
 	}
-	if e.loop != nil && e.loop.Poller().Model() == transport.PollerCompletion {
-		e.enqueue(datagram)
-		return e.submitWriteCompletion()
-	}
-	if e.outHead != nil {
-		e.enqueue(datagram)
-		return e.enableWriteInterest()
-	}
-	again, err := sendDatagram(e.fd, datagram)
-	if err != nil {
-		datagram.Release()
-		return err
-	}
-	if again {
-		e.enqueue(datagram)
-		return e.enableWriteInterest()
-	}
-	datagram.Release()
+	e.enqueue(datagram)
 	return nil
 }
 
@@ -375,16 +358,19 @@ func (e *endpoint) submitWriteCompletion() error {
 }
 
 func (e *endpoint) flushOutbound() error {
+	var batch [maxDatagramWriteBatch]Datagram
 	for e.outHead != nil {
-		datagram := e.outHead.datagram
-		again, err := sendDatagram(e.fd, datagram)
+		count := e.copyOutboundBatch(batch[:])
+		sent, again, err := sendDatagramBatch(e.fd, batch[:count])
 		if err != nil {
 			return err
 		}
-		if again {
+		for index := 0; index < sent; index++ {
+			e.dequeue()
+		}
+		if again || sent < count {
 			return e.enableWriteInterest()
 		}
-		e.dequeue()
 	}
 	if err := e.disableWriteInterest(); err != nil {
 		return err
@@ -393,6 +379,17 @@ func (e *endpoint) flushOutbound() error {
 		e.ch.Pipeline().FireFlushComplete()
 	}
 	return nil
+}
+
+func (e *endpoint) copyOutboundBatch(dst []Datagram) int {
+	entry := e.outHead
+	count := 0
+	for entry != nil && count < len(dst) {
+		dst[count] = entry.datagram
+		entry = entry.next
+		count++
+	}
+	return count
 }
 
 func (e *endpoint) enqueue(datagram Datagram) {
